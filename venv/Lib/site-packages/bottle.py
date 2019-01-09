@@ -16,7 +16,7 @@ License: MIT (see LICENSE for details)
 from __future__ import with_statement
 
 __author__ = 'Marcel Hellkamp'
-__version__ = '0.12.16'
+__version__ = '0.12.13'
 __license__ = 'MIT'
 
 # The gevent server adapter needs to patch some modules before they are imported
@@ -2904,16 +2904,14 @@ class GeventServer(ServerAdapter):
         * See gevent.wsgi.WSGIServer() documentation for more options.
     """
     def run(self, handler):
-        from gevent import pywsgi, local
+        from gevent import wsgi, pywsgi, local
         if not isinstance(threading.local(), local.local):
             msg = "Bottle requires gevent.monkey.patch_all() (before import)"
             raise RuntimeError(msg)
-        if self.options.pop('fast', None):
-            depr('The "fast" option has been deprecated and removed by Gevent.')
-        if self.quiet:
-            self.options['log'] = None
+        if not self.options.pop('fast', None): wsgi = pywsgi
+        self.options['log'] = None if self.quiet else 'default'
         address = (self.host, self.port)
-        server = pywsgi.WSGIServer(address, handler, **self.options)
+        server = wsgi.WSGIServer(address, handler, **self.options)
         if 'BOTTLE_CHILD' in os.environ:
             import signal
             signal.signal(signal.SIGINT, lambda s, f: server.stop())
@@ -3156,7 +3154,7 @@ class FileCheckerThread(threading.Thread):
         files = dict()
 
         for module in list(sys.modules.values()):
-            path = getattr(module, '__file__', '') or ''
+            path = getattr(module, '__file__', '')
             if path[-4:] in ('.pyo', '.pyc'): path = path[:-1]
             if path and exists(path): files[path] = mtime(path)
 
@@ -3420,7 +3418,7 @@ class StplParser(object):
     _re_cache = {} #: Cache for compiled re patterns
     # This huge pile of voodoo magic splits python code into 8 different tokens.
     # 1: All kinds of python strings (trust me, it works)
-    _re_tok = '([urbURB]?(?:\'\'(?!\')|""(?!")|\'{6}|"{6}' \
+    _re_tok = '((?m)[urbURB]?(?:\'\'(?!\')|""(?!")|\'{6}|"{6}' \
                '|\'(?:[^\\\\\']|\\\\.)+?\'|"(?:[^\\\\"]|\\\\.)+?"' \
                '|\'{3}(?:[^\\\\]|\\\\.|\\n)+?\'{3}' \
                '|"{3}(?:[^\\\\]|\\\\.|\\n)+?"{3}))'
@@ -3443,8 +3441,7 @@ class StplParser(object):
     # Match the start tokens of code areas in a template
     _re_split = '(?m)^[ \t]*(\\\\?)((%(line_start)s)|(%(block_start)s))(%%?)'
     # Match inline statements (may contain python strings)
-    _re_inl = '(?m)%%(inline_start)s((?:%s|[^\'"\n]*?)+)%%(inline_end)s' % _re_inl
-    _re_tok = '(?m)' + _re_tok
+    _re_inl = '%%(inline_start)s((?:%s|[^\'"\n]*?)+)%%(inline_end)s' % _re_inl
 
     default_syntax = '<% %> % {{ }}'
 
